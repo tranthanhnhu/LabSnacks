@@ -11,8 +11,9 @@ type NavItem = { href: string; label: string; icon: string; roles: RoleSlug[] };
 const NAV: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: "dashboard", roles: ["ADMIN", "MANAGER", "STAFF"] },
   { href: "/inventory", label: "Inventory", icon: "inventory_2", roles: ["ADMIN", "MANAGER", "STAFF"] },
-  { href: "/restock", label: "Restock", icon: "shopping_cart", roles: ["ADMIN", "MANAGER", "STAFF"] },
-  { href: "/analytics", label: "Analytics", icon: "analytics", roles: ["ADMIN", "MANAGER"] },
+  { href: "/history", label: "History", icon: "history", roles: ["ADMIN", "MANAGER", "STAFF"] },
+  { href: "/restock", label: "Requests", icon: "add_reaction", roles: ["ADMIN", "MANAGER", "STAFF"] },
+  { href: "/analytics", label: "Analytics", icon: "analytics", roles: ["ADMIN", "MANAGER", "STAFF"] },
   { href: "/users", label: "Users", icon: "group", roles: ["ADMIN"] },
 ];
 
@@ -32,6 +33,25 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           Kawaii Lab Snacks
         </Link>
         <div className="hidden items-center gap-4 md:flex">
+          <nav className="flex items-center gap-8 font-headline font-bold">
+            {NAV.filter((n) => canSee(n, role))
+              .filter((n) => n.href !== "/users")
+              .slice(0, 5)
+              .map((item) => {
+                const active = pathname === item.href;
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`transition-transform duration-300 hover:scale-105 ${
+                      active ? "text-rose-900" : "text-rose-400"
+                    }`}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
+          </nav>
           <div className="flex items-center rounded-full bg-surface-container-highest px-4 py-2 ring-1 ring-outline-variant/15">
             <span className="material-symbols-outlined text-outline">search</span>
             <span className="ml-2 text-sm text-on-surface-variant">Search snacks…</span>
@@ -94,7 +114,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             className="gradient-primary mt-auto mx-4 flex items-center justify-center gap-2 rounded-xl py-4 font-bold text-on-primary sticker-shadow bouncy-hover active:scale-95"
           >
             <span className="material-symbols-outlined">add_circle</span>
-            Request restock
+            Request Snack
           </Link>
         </aside>
 

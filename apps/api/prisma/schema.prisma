@@ -26,6 +26,13 @@ enum NotificationType {
   RESTOCK_PENDING
 }
 
+enum InventoryLogType {
+  TAKE
+  RESTOCK
+  ADJUST
+  CREATE
+}
+
 model Role {
   id    String     @id @default(cuid())
   slug  RoleSlug   @unique
@@ -46,6 +53,7 @@ model User {
   restockRequestsRequested RestockRequest[] @relation("RequestedBy")
   restockRequestsReviewed  RestockRequest[] @relation("ReviewedBy")
   notifications            Notification[]
+  inventoryLogs            InventoryLog[]
 }
 
 model Product {
@@ -60,6 +68,7 @@ model Product {
 
   inventory       Inventory?
   restockRequests RestockRequest[]
+  logs            InventoryLog[]
 }
 
 model Inventory {
@@ -69,6 +78,21 @@ model Inventory {
   quantity               Int
   lowStockThreshold      Int
   lastLowStockNotifiedAt DateTime?
+}
+
+model InventoryLog {
+  id        String           @id @default(cuid())
+  type      InventoryLogType
+  productId String
+  product   Product          @relation(fields: [productId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  delta     Int
+  note      String?
+  createdAt DateTime         @default(now())
+
+  @@index([productId, createdAt])
+  @@index([userId, createdAt])
 }
 
 model RestockRequest {

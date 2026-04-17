@@ -15,28 +15,19 @@ type Summary = {
 type Trend = { status: string; count: number }[];
 
 export default function AnalyticsPage() {
-  const { token, user } = useAuth();
-  const allowed = user?.role.slug === "ADMIN" || user?.role.slug === "MANAGER";
+  const { token } = useAuth();
 
   const summary = useQuery({
     queryKey: ["analytics-summary"],
     queryFn: () => apiFetch<Summary>("/api/analytics/summary", { token }),
-    enabled: !!token && allowed,
+    enabled: !!token,
   });
 
   const trend = useQuery({
     queryKey: ["analytics-trend"],
     queryFn: () => apiFetch<Trend>("/api/analytics/restock-trend", { token }),
-    enabled: !!token && allowed,
+    enabled: !!token,
   });
-
-  if (!allowed) {
-    return (
-      <div className="rounded-[var(--radius-lg)] bg-error-container/20 p-8 text-center font-headline text-on-surface">
-        You do not have permission to view analytics (Admin / Inventory Manager only).
-      </div>
-    );
-  }
 
   if (summary.isLoading || trend.isLoading) {
     return <p className="text-on-surface-variant">Loading analytics…</p>;

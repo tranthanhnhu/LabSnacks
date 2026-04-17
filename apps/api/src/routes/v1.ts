@@ -1,4 +1,7 @@
 import { Router } from "express";
+import fs from "node:fs";
+import path from "node:path";
+import multer from "multer";
 import { z } from "zod";
 import { RoleSlug } from "@prisma/client";
 import type { AuthService } from "../services/AuthService.js";
@@ -9,6 +12,7 @@ import type { NotificationService } from "../services/NotificationService.js";
 import type { UserService } from "../services/UserService.js";
 import type { AnalyticsService } from "../services/AnalyticsService.js";
 import type { DashboardService } from "../services/DashboardService.js";
+import type { HistoryService } from "../services/HistoryService.js";
 import { authMiddleware, requireRoles } from "../middleware/auth.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 
@@ -27,10 +31,30 @@ export type Deps = {
   users: UserService;
   analytics: AnalyticsService;
   dashboard: DashboardService;
+  history: HistoryService;
 };
 
 export function createV1Router(deps: Deps) {
   const r = Router();
+
+  const upload = multer({
+    storage: multer.diskStorage({
+      destination: (_req, _file, cb) => {
+        const dir = path.resolve("uploads");
+        fs.mkdirSync(dir, { recursive: true });
+        cb(null, dir);
+      },
+      filename: (_req, file, cb) => {
+        const safe = file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_");
+        cb(null, `${Date.now()}_${safe}`);
+      },
+    }),
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      if (!file.mimetype.startsWith("image/")) return cb(new Error("INVALID_FILE"));
+      cb(null, true);
+    },
+  });
 
   const loginSchema = z.object({
     email: z.string().email(),
@@ -67,7 +91,6 @@ export function createV1Router(deps: Deps) {
   r.get(
     "/analytics/summary",
     authMiddleware,
-    requireRoles(RoleSlug.ADMIN, RoleSlug.MANAGER),
     asyncHandler(async (_req, res) => {
       const data = await deps.analytics.summary();
       res.json(data);
@@ -77,10 +100,29 @@ export function createV1Router(deps: Deps) {
   r.get(
     "/analytics/restock-trend",
     authMiddleware,
-    requireRoles(RoleSlug.ADMIN, RoleSlug.MANAGER),
     asyncHandler(async (_req, res) => {
       const data = await deps.analytics.restockTrend();
       res.json(data);
+    }),
+  );
+
+  r.get(
+    "/history",
+    authMiddleware,
+    asyncHandler(async (_req, res) => {
+      const rows = await deps.history.recent();
+      res.json(rows);
+    }),
+  );
+
+  r.post(
+    "/uploads",
+    authMiddleware,
+    requireRoles(RoleSlug.ADMIN, RoleSlug.MANAGER),
+    upload.single("file"),
+    asyncHandler(async (req, res) => {
+      if (!req.file) throw new Error("INVALID_FILE");
+      res.status(201).json({ url: `/uploads/${req.file.filename}` });
     }),
   );
 
@@ -173,6 +215,17 @@ export function createV1Router(deps: Deps) {
     asyncHandler(async (req, res) => {
       const body = qtySchema.parse(req.body);
       const row = await deps.inventory.updateQuantity(paramId(req.params.productId), body.quantity);
+      res.json(row);
+    }),
+  );
+
+  const takeSchema = z.object({ quantity: z.number().int().positive().default(1) });
+  r.post(
+    "/inventory/:productId/take",
+    authMiddleware,
+    asyncHandler(async (req, res) => {
+      const body = takeSchema.parse(req.body ?? {});
+      const row = await deps.inventory.take(paramId(req.params.productId), req.user!.id, body.quantity);
       res.json(row);
     }),
   );

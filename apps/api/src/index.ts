@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import path from "node:path";
 import { env } from "./config/env.js";
 import { prisma } from "./lib/prisma.js";
 import { StockSubject } from "./observers/StockSubject.js";
@@ -12,6 +13,7 @@ import { NotificationService } from "./services/NotificationService.js";
 import { UserService } from "./services/UserService.js";
 import { AnalyticsService } from "./services/AnalyticsService.js";
 import { DashboardService } from "./services/DashboardService.js";
+import { HistoryService } from "./services/HistoryService.js";
 import { createV1Router } from "./routes/v1.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 
@@ -30,6 +32,7 @@ const deps = {
   users: new UserService(),
   analytics: new AnalyticsService(),
   dashboard: new DashboardService(),
+  history: new HistoryService(),
 };
 
 const app = express();
@@ -40,6 +43,7 @@ app.use(
   }),
 );
 app.use(express.json({ limit: "1mb" }));
+app.use("/uploads", express.static(path.resolve("uploads")));
 
 app.get("/health", (_req, res) => {
   res.json({ ok: true });
