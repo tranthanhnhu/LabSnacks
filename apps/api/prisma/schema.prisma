@@ -1,0 +1,98 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum RoleSlug {
+  ADMIN
+  MANAGER
+  STAFF
+}
+
+enum RestockStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum NotificationType {
+  LOW_STOCK
+  RESTOCK_APPROVED
+  RESTOCK_REJECTED
+  RESTOCK_PENDING
+}
+
+model Role {
+  id    String     @id @default(cuid())
+  slug  RoleSlug   @unique
+  name  String
+  users User[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  roleId       String
+  role         Role     @relation(fields: [roleId], references: [id])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  restockRequestsRequested RestockRequest[] @relation("RequestedBy")
+  restockRequestsReviewed  RestockRequest[] @relation("ReviewedBy")
+  notifications            Notification[]
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  sku         String   @unique
+  category    String
+  description String?  @db.Text
+  imageUrl    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  inventory       Inventory?
+  restockRequests RestockRequest[]
+}
+
+model Inventory {
+  id                     String    @id @default(cuid())
+  productId              String    @unique
+  product                Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity               Int
+  lowStockThreshold      Int
+  lastLowStockNotifiedAt DateTime?
+}
+
+model RestockRequest {
+  id              String        @id @default(cuid())
+  productId       String
+  product         Product       @relation(fields: [productId], references: [id])
+  requestedById   String
+  requestedBy     User          @relation("RequestedBy", fields: [requestedById], references: [id])
+  quantity        Int
+  status          RestockStatus @default(PENDING)
+  reviewedById    String?
+  reviewedBy      User?         @relation("ReviewedBy", fields: [reviewedById], references: [id])
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String?
+  user      User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  body      String           @db.Text
+  metadata  Json?
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+}
