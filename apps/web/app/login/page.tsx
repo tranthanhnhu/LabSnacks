@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuth, type AuthUser } from "@/context/auth-context";
-import { apiFetch, ApiError } from "@/lib/api";
+import { apiFetch, apiUrl, ApiError } from "@/lib/api";
 
 export default function LoginPage() {
   const { login, token, ready } = useAuth();
@@ -38,8 +38,19 @@ export default function LoginPage() {
       login(res.token, res.user);
       router.push("/dashboard");
     } catch (err) {
-      if (err instanceof ApiError) setError("Invalid email or password.");
-      else setError("Sign-in failed. Please try again.");
+      if (err instanceof ApiError) {
+        if (err.status === 0) {
+          setError(
+            `Cannot reach API. Make sure the backend is running and try again (health: ${apiUrl("/health")}).`,
+          );
+        } else if (err.status === 401) {
+          setError("Invalid email or password.");
+        } else {
+          setError(`Sign-in failed (HTTP ${err.status}). API: ${apiUrl("/api/auth/login")}`);
+        }
+      } else {
+        setError("Sign-in failed. Please try again.");
+      }
     } finally {
       setLoading(false);
     }

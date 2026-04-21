@@ -38,7 +38,24 @@ const deps = {
 const app = express();
 app.use(
   cors({
-    origin: env.CORS_ORIGIN.split(",").map((s) => s.trim()),
+    origin: (origin, cb) => {
+      // Non-browser clients (curl/Postman) may not send Origin.
+      if (!origin) return cb(null, true);
+
+      const allowed = env.CORS_ORIGIN.split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      if (allowed.includes(origin)) return cb(null, true);
+
+      // In dev, Next.js may auto-pick a different port (3001/3002/...) when 3000 is busy.
+      // Allow localhost ports to reduce setup friction for newcomers.
+      if (env.NODE_ENV === "development" && /^http:\/\/localhost:\d+$/.test(origin)) {
+        return cb(null, true);
+      }
+
+      return cb(null, false);
+    },
     credentials: true,
   }),
 );

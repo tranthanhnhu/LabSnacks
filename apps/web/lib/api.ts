@@ -25,7 +25,13 @@ export async function apiFetch<T>(
   }
   if (token) h.set("Authorization", `Bearer ${token}`);
 
-  const res = await fetch(`${API_BASE}${path}`, { ...rest, headers: h });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, { ...rest, headers: h });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new ApiError(`Cannot reach API at ${API_BASE} (${msg})`, 0);
+  }
   if (res.status === 204) return undefined as T;
 
   const text = await res.text();
