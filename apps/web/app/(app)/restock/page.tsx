@@ -2,8 +2,10 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useAuth } from "@/context/auth-context";
 import { apiFetch, ApiError } from "@/lib/api";
+import { toast } from "@/lib/toast";
 
 type RestockRow = {
   id: string;
@@ -35,6 +37,9 @@ export default function RestockPage() {
 
   const [productId, setProductId] = useState("");
   const [quantity, setQuantity] = useState("10");
+  const [rejectId, setRejectId] = useState<string | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
+  const [approveId, setApproveId] = useState<string | null>(null);
 
   const createReq = useMutation({
     mutationFn: async () => {
@@ -45,10 +50,12 @@ export default function RestockPage() {
       });
     },
     onSuccess: () => {
+      toast.success("Restock request submitted.");
       qc.invalidateQueries({ queryKey: ["restock"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
       qc.invalidateQueries({ queryKey: ["notifications"] });
     },
+    onError: (e) => toast.fromError(e, "Could not submit request."),
   });
 
   const approve = useMutation({
@@ -56,25 +63,32 @@ export default function RestockPage() {
       await apiFetch(`/api/restock/${id}/approve`, { method: "POST", token });
     },
     onSuccess: () => {
+      toast.success("Request approved.");
+      setApproveId(null);
       qc.invalidateQueries({ queryKey: ["restock"] });
       qc.invalidateQueries({ queryKey: ["inventory"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
       qc.invalidateQueries({ queryKey: ["notifications"] });
     },
+    onError: (e) => toast.fromError(e, "Could not approve."),
   });
 
   const reject = useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
       await apiFetch(`/api/restock/${id}/reject`, {
         method: "POST",
         token,
-        body: JSON.stringify({ reason: "Not enough budget for this cycle." }),
+        body: JSON.stringify({ reason: reason || undefined }),
       });
     },
     onSuccess: () => {
+      toast.success("Request rejected.");
+      setRejectId(null);
+      setRejectReason("");
       qc.invalidateQueries({ queryKey: ["restock"] });
       qc.invalidateQueries({ queryKey: ["notifications"] });
     },
+    onError: (e) => toast.fromError(e, "Could not reject."),
   });
 
   if (list.isLoading) return <p className="text-on-surface-variant">Loading requests…</p>;
@@ -168,15 +182,18 @@ export default function RestockPage() {
                       <>
                         <button
                           type="button"
-                          className="rounded-full bg-secondary px-3 py-1 text-xs font-bold text-on-secondary"
-                          onClick={() => approve.mutate(r.id)}
+                          className="rounded-full bg-secondary px-3 py-1 text-xs font-bold text-on-primary"
+                          onClick={() => setApproveId(r.id)}
                         >
                           Approve
                         </button>
                         <button
                           type="button"
                           className="rounded-full bg-outline-variant/30 px-3 py-1 text-xs font-bold"
-                          onClick={() => reject.mutate(r.id)}
+                          onClick={() => {
+                            setRejectId(r.id);
+                            setRejectReason("");
+                          }}
                         >
                           Reject
                         </button>
@@ -189,6 +206,55 @@ export default function RestockPage() {
           </tbody>
         </table>
       </section>
+
+      <ConfirmDialog
+        open={!!approveId}
+        title="Approve restock?"
+        message="This will add the requested quantity to inventory."
+        confirmLabel="Approve"
+        loading={approve.isPending}
+        onConfirm={() => approveId && approve.mutate(approveId)}
+        onCancel={() => setApproveId(null)}
+      />
+
+      {rejectId && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-on-surface/40 backdrop-blur-sm"
+            aria-label="Close"
+            onClick={() => setRejectId(null)}
+          />
+          <div className="relative z-10 w-full max-w-md rounded-[var(--radius-lg)] bg-surface-container-lowest p-6 shadow-xl ring-1 ring-outline-variant/15">
+            <h2 className="font-headline text-xl font-bold">Reject request</h2>
+            <p className="mt-1 text-sm text-on-surface-variant">Provide a reason for the requester.</p>
+            <textarea
+              className="mt-4 w-full rounded-xl bg-surface-container-highest px-4 py-3 ring-1 ring-outline-variant/15"
+              rows={3}
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              placeholder="e.g. Not enough budget for this cycle."
+            />
+            <div className="mt-4 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setRejectId(null)}
+                className="rounded-full px-5 py-2 text-sm font-bold text-primary"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={reject.isPending}
+                onClick={() => reject.mutate({ id: rejectId, reason: rejectReason })}
+                className="rounded-full bg-error px-5 py-2 text-sm font-bold text-on-primary disabled:opacity-50"
+              >
+                Reject
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

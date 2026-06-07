@@ -22,6 +22,19 @@ async function main() {
   const managerRole = await prisma.role.findUniqueOrThrow({ where: { slug: RoleSlug.MANAGER } });
   const staffRole = await prisma.role.findUniqueOrThrow({ where: { slug: RoleSlug.STAFF } });
 
+  const takeLimits = [
+    { roleId: adminRole.id, maxPerTake: 999, maxPerDay: 999 },
+    { roleId: managerRole.id, maxPerTake: 999, maxPerDay: 999 },
+    { roleId: staffRole.id, maxPerTake: 3, maxPerDay: 10 },
+  ];
+  for (const tl of takeLimits) {
+    await prisma.roleTakeLimit.upsert({
+      where: { roleId: tl.roleId },
+      update: { maxPerTake: tl.maxPerTake, maxPerDay: tl.maxPerDay },
+      create: tl,
+    });
+  }
+
   const hash = await bcrypt.hash("demo123", 10);
 
   const admin = await prisma.user.upsert({

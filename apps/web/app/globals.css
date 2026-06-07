@@ -14,8 +14,10 @@
   --color-primary-container: #ff709f;
   --color-on-primary-container: #4c0022;
   --color-secondary: #00647c;
+  --color-on-secondary: #ffffff;
   --color-secondary-container: #92dcf8;
   --color-on-secondary-container: #004e61;
+  --color-tertiary: #7d5260;
   --color-tertiary-container: #fad538;
   --color-on-tertiary-container: #5a4a00;
   --color-outline: #94698a;
@@ -73,4 +75,34 @@ h3 {
 
 .gradient-primary {
   background-image: linear-gradient(135deg, var(--color-primary), var(--color-primary-container));
+}
+
+.dark {
+  --color-background: #1a1218;
+  --color-foreground: #ffdff4;
+  --color-surface: #1a1218;
+  --color-on-surface: #ffdff4;
+  --color-on-surface-variant: #cf9fc2;
+  --color-primary: #ff709f;
+  --color-on-primary: #4c0022;
+  --color-primary-container: #8a2048;
+  --color-on-primary-container: #ffd9e4;
+  --color-secondary: #92dcf8;
+  --color-on-secondary: #003544;
+  --color-secondary-container: #004e61;
+  --color-on-secondary-container: #c2e8ff;
+  --color-tertiary: #e8b4bc;
+  --color-tertiary-container: #5a4a00;
+  --color-on-tertiary-container: #fff0a0;
+  --color-outline: #a8809c;
+  --color-outline-variant: #5c3f54;
+  --color-error: #ffb3c0;
+  --color-error-container: #93002a;
+  --color-on-error-container: #ffd9de;
+  --color-surface-container: #2a1f28;
+  --color-surface-container-low: #241a22;
+  --color-surface-container-high: #322630;
+  --color-surface-container-highest: #3d2f3a;
+  --color-surface-container-lowest: #151015;
+  --shadow-sticker: 0 12px 32px rgba(0, 0, 0, 0.35);
 }

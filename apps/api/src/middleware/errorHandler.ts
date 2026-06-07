@@ -13,6 +13,8 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
     INVALID_CREDENTIALS: 401,
     INVALID_STATE: 409,
     INVALID_QUANTITY: 400,
+    TAKE_LIMIT_EXCEEDED: 429,
+    INVALID_FILE: 400,
   };
   const status = map[message] ?? 500;
   if (status === 500 && message !== "INTERNAL_ERROR") {

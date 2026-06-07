@@ -4,7 +4,10 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth, type RoleSlug } from "@/context/auth-context";
+import { MobileNav } from "@/components/mobile-nav";
 import { NotificationBell } from "@/components/notification-bell";
+import { SearchBar } from "@/components/search-bar";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 type NavItem = { href: string; label: string; icon: string; roles: RoleSlug[] };
 
@@ -28,10 +31,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-surface font-body text-on-surface selection:bg-primary-container selection:text-on-primary-container">
-      <header className="fixed top-0 left-0 right-0 z-50 flex w-full items-center justify-between bg-pink-50/60 px-6 py-4 shadow-[0_12px_32px_rgba(69,34,63,0.08)] backdrop-blur-xl">
+      <header className="fixed top-0 left-0 right-0 z-50 flex w-full items-center justify-between bg-surface-container-low/80 px-6 py-4 shadow-[var(--shadow-sticker)] backdrop-blur-xl">
         <Link href="/dashboard" className="font-headline text-2xl font-black tracking-tight text-primary">
           Kawaii Lab Snacks
         </Link>
+        <MobileNav />
         <div className="hidden items-center gap-4 md:flex">
           <nav className="flex items-center gap-8 font-headline font-bold">
             {NAV.filter((n) => canSee(n, role))
@@ -44,7 +48,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     key={item.href}
                     href={item.href}
                     className={`transition-transform duration-300 hover:scale-105 ${
-                      active ? "text-rose-900" : "text-rose-400"
+                      active ? "text-primary" : "text-on-surface-variant"
                     }`}
                   >
                     {item.label}
@@ -52,10 +56,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 );
               })}
           </nav>
-          <div className="flex items-center rounded-full bg-surface-container-highest px-4 py-2 ring-1 ring-outline-variant/15">
-            <span className="material-symbols-outlined text-outline">search</span>
-            <span className="ml-2 text-sm text-on-surface-variant">Search snacks…</span>
-          </div>
+          <SearchBar />
+          <ThemeToggle />
           <NotificationBell />
           <div className="flex items-center gap-2 rounded-full bg-surface-container-low px-3 py-1">
             <span className="text-sm font-medium">{user!.name}</span>
@@ -74,7 +76,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </header>
 
       <div className="flex min-h-screen pt-24 pb-12">
-        <aside className="fixed left-0 top-0 z-40 hidden h-full w-72 flex-col rounded-r-[var(--radius-xl)] bg-pink-100/50 p-4 pt-24 shadow-xl backdrop-blur-lg md:flex">
+        <aside className="fixed left-0 top-0 z-40 hidden h-full w-72 flex-col rounded-r-[var(--radius-xl)] bg-surface-container-low/90 p-4 pt-24 shadow-xl backdrop-blur-lg md:flex">
           <div className="mb-10 flex items-center gap-4 px-4">
             <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-full bg-primary-container">
               <Image
@@ -118,7 +120,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </Link>
         </aside>
 
-        <main className="flex-1 px-4 md:ml-72 md:px-12">{children}</main>
+        <main className="flex-1 px-4 pb-24 pt-24 md:ml-72 md:px-12 md:pb-12">{children}</main>
       </div>
     </div>
   );

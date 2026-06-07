@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import multer from "multer";
 import { z } from "zod";
-import { RoleSlug } from "@prisma/client";
+import { RoleSlug, InventoryLogType, ProductUnit } from "@prisma/client";
 import type { AuthService } from "../services/AuthService.js";
 import type { ProductService } from "../services/ProductService.js";
 import type { InventoryService } from "../services/InventoryService.js";
@@ -13,6 +13,9 @@ import type { UserService } from "../services/UserService.js";
 import type { AnalyticsService } from "../services/AnalyticsService.js";
 import type { DashboardService } from "../services/DashboardService.js";
 import type { HistoryService } from "../services/HistoryService.js";
+import type { ExpiryService } from "../services/ExpiryService.js";
+import type { ImportService } from "../services/ImportService.js";
+import type { TakeQuotaService } from "../services/TakeQuotaService.js";
 import { authMiddleware, requireRoles } from "../middleware/auth.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 
@@ -32,6 +35,9 @@ export type Deps = {
   analytics: AnalyticsService;
   dashboard: DashboardService;
   history: HistoryService;
+  expiry: ExpiryService;
+  import: ImportService;
+  takeQuota: TakeQuotaService;
 };
 
 export function createV1Router(deps: Deps) {
@@ -80,10 +86,19 @@ export function createV1Router(deps: Deps) {
   );
 
   r.get(
+    "/me/take-quota",
+    authMiddleware,
+    asyncHandler(async (req, res) => {
+      const quota = await deps.takeQuota.getQuota(req.user!.id);
+      res.json(quota);
+    }),
+  );
+
+  r.get(
     "/dashboard",
     authMiddleware,
-    asyncHandler(async (_req, res) => {
-      const data = await deps.dashboard.overview();
+    asyncHandler(async (req, res) => {
+      const data = await deps.dashboard.overview(req.user!.id, req.user!.roleSlug);
       res.json(data);
     }),
   );
@@ -107,11 +122,89 @@ export function createV1Router(deps: Deps) {
   );
 
   r.get(
-    "/history",
+    "/analytics/take-trend",
+    authMiddleware,
+    asyncHandler(async (req, res) => {
+      const q = z
+        .object({
+          from: z.string().optional(),
+          to: z.string().optional(),
+          granularity: z.enum(["day", "week"]).optional(),
+        })
+        .parse(req.query);
+      const data = await deps.analytics.takeTrend({
+        from: q.from ? new Date(q.from) : undefined,
+        to: q.to ? new Date(q.to) : undefined,
+        granularity: q.granularity,
+      });
+      res.json(data);
+    }),
+  );
+
+  r.get(
+    "/analytics/top-products",
+    authMiddleware,
+    asyncHandler(async (req, res) => {
+      const q = z
+        .object({
+          limit: z.coerce.number().int().positive().max(50).optional(),
+          from: z.string().optional(),
+          to: z.string().optional(),
+        })
+        .parse(req.query);
+      const data = await deps.analytics.topProducts({
+        limit: q.limit,
+        from: q.from ? new Date(q.from) : undefined,
+        to: q.to ? new Date(q.to) : undefined,
+      });
+      res.json(data);
+    }),
+  );
+
+  r.get(
+    "/analytics/restock-approval-time",
     authMiddleware,
     asyncHandler(async (_req, res) => {
-      const rows = await deps.history.recent();
-      res.json(rows);
+      const data = await deps.analytics.restockApprovalTime();
+      res.json(data);
+    }),
+  );
+
+  r.get(
+    "/analytics/expiry",
+    authMiddleware,
+    asyncHandler(async (req, res) => {
+      const q = z.object({ withinDays: z.coerce.number().int().positive().optional() }).parse(req.query);
+      const data = await deps.analytics.expiryReport(q.withinDays);
+      res.json(data);
+    }),
+  );
+
+  const historyQuerySchema = z.object({
+    page: z.coerce.number().int().positive().optional(),
+    limit: z.coerce.number().int().positive().max(100).optional(),
+    type: z.nativeEnum(InventoryLogType).optional(),
+    productId: z.string().optional(),
+    userId: z.string().optional(),
+    from: z.string().optional(),
+    to: z.string().optional(),
+  });
+
+  r.get(
+    "/history",
+    authMiddleware,
+    asyncHandler(async (req, res) => {
+      const q = historyQuerySchema.parse(req.query);
+      const data = await deps.history.list({
+        page: q.page,
+        limit: q.limit,
+        type: q.type,
+        productId: q.productId,
+        userId: q.userId,
+        from: q.from ? new Date(q.from) : undefined,
+        to: q.to ? new Date(q.to) : undefined,
+      });
+      res.json(data);
     }),
   );
 
@@ -143,6 +236,9 @@ export function createV1Router(deps: Deps) {
     imageUrl: z.string().url().optional().or(z.literal("")),
     initialQuantity: z.number().int().nonnegative(),
     lowStockThreshold: z.number().int().nonnegative(),
+    unit: z.nativeEnum(ProductUnit).optional(),
+    unitLabel: z.string().optional(),
+    expiryDate: z.string().optional(),
   });
 
   r.post(
@@ -155,8 +251,28 @@ export function createV1Router(deps: Deps) {
         ...body,
         imageUrl: body.imageUrl || undefined,
         description: body.description,
+        unit: body.unit,
+        unitLabel: body.unitLabel,
+        expiryDate: body.expiryDate ? new Date(body.expiryDate) : undefined,
       });
       res.status(201).json(row);
+    }),
+  );
+
+  r.get(
+    "/products/:id/history",
+    authMiddleware,
+    asyncHandler(async (req, res) => {
+      const q = historyQuerySchema.parse(req.query);
+      const data = await deps.history.forProduct(paramId(req.params.id), {
+        page: q.page,
+        limit: q.limit,
+        type: q.type,
+        userId: q.userId,
+        from: q.from ? new Date(q.from) : undefined,
+        to: q.to ? new Date(q.to) : undefined,
+      });
+      res.json(data);
     }),
   );
 
@@ -175,6 +291,9 @@ export function createV1Router(deps: Deps) {
     category: z.string().min(1).optional(),
     description: z.string().nullable().optional(),
     imageUrl: z.string().nullable().optional(),
+    unit: z.nativeEnum(ProductUnit).optional(),
+    unitLabel: z.string().nullable().optional(),
+    expiryDate: z.string().nullable().optional(),
   });
 
   r.patch(
@@ -183,7 +302,11 @@ export function createV1Router(deps: Deps) {
     requireRoles(RoleSlug.ADMIN, RoleSlug.MANAGER),
     asyncHandler(async (req, res) => {
       const body = productUpdateSchema.parse(req.body);
-      const row = await deps.products.update(paramId(req.params.id), body);
+      const row = await deps.products.update(paramId(req.params.id), {
+        ...body,
+        expiryDate:
+          body.expiryDate === null ? null : body.expiryDate ? new Date(body.expiryDate) : undefined,
+      });
       res.json(row);
     }),
   );
@@ -199,9 +322,45 @@ export function createV1Router(deps: Deps) {
   );
 
   r.get(
+    "/products/import/template",
+    authMiddleware,
+    requireRoles(RoleSlug.ADMIN, RoleSlug.MANAGER),
+    asyncHandler(async (_req, res) => {
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader("Content-Disposition", 'attachment; filename="products-template.csv"');
+      res.send(deps.import.templateCsv());
+    }),
+  );
+
+  const csvUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 2 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+      if (!file.originalname.match(/\.csv$/i) && file.mimetype !== "text/csv") {
+        return cb(new Error("INVALID_FILE"));
+      }
+      cb(null, true);
+    },
+  });
+
+  r.post(
+    "/products/import",
+    authMiddleware,
+    requireRoles(RoleSlug.ADMIN, RoleSlug.MANAGER),
+    csvUpload.single("file"),
+    asyncHandler(async (req, res) => {
+      if (!req.file) throw new Error("INVALID_FILE");
+      const content = req.file.buffer.toString("utf-8");
+      const result = await deps.import.importCsv(content);
+      res.json(result);
+    }),
+  );
+
+  r.get(
     "/inventory",
     authMiddleware,
     asyncHandler(async (_req, res) => {
+      await deps.expiry.checkAndNotify();
       const rows = await deps.inventory.list();
       res.json(rows);
     }),

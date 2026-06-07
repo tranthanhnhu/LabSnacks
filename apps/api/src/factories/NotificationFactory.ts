@@ -70,4 +70,24 @@ export class NotificationFactory {
       metadata: { requestId: input.requestId },
     };
   }
+
+  static createExpirySoon(input: {
+    productId: string;
+    productName: string;
+    sku: string;
+    expiryDate: Date;
+    daysLeft: number;
+  }): NotificationDraft {
+    return {
+      type: NotificationType.EXPIRY_SOON,
+      title: `Expiring soon: ${input.productName}`,
+      body: `SKU ${input.sku} expires in ${input.daysLeft} day(s) (${input.expiryDate.toLocaleDateString()}).`,
+      metadata: {
+        productId: input.productId,
+        sku: input.sku,
+        expiryDate: input.expiryDate.toISOString(),
+        daysLeft: input.daysLeft,
+      },
+    };
+  }
 }

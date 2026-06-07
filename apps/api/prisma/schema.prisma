@@ -13,6 +13,16 @@ enum RoleSlug {
   STAFF
 }
 
+enum ProductUnit {
+  PIECE
+  BOX
+  PACK
+  BOTTLE
+  CUP
+  KG
+  G
+}
+
 enum RestockStatus {
   PENDING
   APPROVED
@@ -24,6 +34,7 @@ enum NotificationType {
   RESTOCK_APPROVED
   RESTOCK_REJECTED
   RESTOCK_PENDING
+  EXPIRY_SOON
 }
 
 enum InventoryLogType {
@@ -34,10 +45,19 @@ enum InventoryLogType {
 }
 
 model Role {
-  id    String     @id @default(cuid())
-  slug  RoleSlug   @unique
-  name  String
-  users User[]
+  id        String         @id @default(cuid())
+  slug      RoleSlug       @unique
+  name      String
+  users     User[]
+  takeLimit RoleTakeLimit?
+}
+
+model RoleTakeLimit {
+  id         String @id @default(cuid())
+  roleId     String @unique
+  role       Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  maxPerTake Int    @default(5)
+  maxPerDay  Int    @default(20)
 }
 
 model User {
@@ -57,14 +77,18 @@ model User {
 }
 
 model Product {
-  id          String   @id @default(cuid())
-  name        String
-  sku         String   @unique
-  category    String
-  description String?  @db.Text
-  imageUrl    String?  @db.Text
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                   String      @id @default(cuid())
+  name                 String
+  sku                  String      @unique
+  category             String
+  description          String?     @db.Text
+  imageUrl             String?     @db.Text
+  unit                 ProductUnit @default(PIECE)
+  unitLabel            String?
+  expiryDate           DateTime?
+  lastExpiryNotifiedAt DateTime?
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
 
   inventory       Inventory?
   restockRequests RestockRequest[]
@@ -93,20 +117,21 @@ model InventoryLog {
 
   @@index([productId, createdAt])
   @@index([userId, createdAt])
+  @@index([type, createdAt])
 }
 
 model RestockRequest {
-  id              String        @id @default(cuid())
-  productId       String
-  product         Product       @relation(fields: [productId], references: [id])
-  requestedById   String
-  requestedBy     User          @relation("RequestedBy", fields: [requestedById], references: [id])
-  quantity        Int
-  status          RestockStatus @default(PENDING)
-  reviewedById    String?
-  reviewedBy      User?         @relation("ReviewedBy", fields: [reviewedById], references: [id])
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  id            String        @id @default(cuid())
+  productId     String
+  product       Product       @relation(fields: [productId], references: [id])
+  requestedById String
+  requestedBy   User          @relation("RequestedBy", fields: [requestedById], references: [id])
+  quantity      Int
+  status        RestockStatus @default(PENDING)
+  reviewedById  String?
+  reviewedBy    User?         @relation("ReviewedBy", fields: [reviewedById], references: [id])
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 }
 
 model Notification {

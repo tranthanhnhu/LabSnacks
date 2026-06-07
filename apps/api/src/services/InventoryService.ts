@@ -1,9 +1,13 @@
-import { InventoryLogType } from "@prisma/client";
+import { InventoryLogType, ProductUnit } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import type { StockSubject } from "../observers/StockSubject.js";
+import type { TakeQuotaService } from "./TakeQuotaService.js";
 
 export class InventoryService {
-  constructor(private readonly stockSubject: StockSubject) {}
+  constructor(
+    private readonly stockSubject: StockSubject,
+    private readonly takeQuota: TakeQuotaService,
+  ) {}
 
   list() {
     return prisma.inventory.findMany({
@@ -90,7 +94,6 @@ export class InventoryService {
     });
   }
 
-  /** Used when a restock is approved: add quantity and emit event (Observer handles low-stock). */
   async adjustQuantity(productId: string, delta: number) {
     const inv = await prisma.inventory.findUnique({
       where: { productId },
@@ -135,6 +138,8 @@ export class InventoryService {
 
   async take(productId: string, userId: string, quantity = 1) {
     if (quantity <= 0) throw new Error("INVALID_QUANTITY");
+
+    await this.takeQuota.assertCanTake(userId, quantity);
 
     const inv = await prisma.inventory.findUnique({
       where: { productId },

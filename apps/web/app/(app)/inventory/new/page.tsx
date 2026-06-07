@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useAuth } from "@/context/auth-context";
 import { apiFetch, ApiError, apiUrl } from "@/lib/api";
+import { toast } from "@/lib/toast";
+import { PRODUCT_UNITS } from "@/lib/unit-label";
 
 type Product = {
   id: string;
@@ -26,6 +28,9 @@ export default function NewSnackPage() {
   const [file, setFile] = useState<File | null>(null);
   const [initialQuantity, setInitialQuantity] = useState("10");
   const [lowStockThreshold, setLowStockThreshold] = useState("10");
+  const [unit, setUnit] = useState("PIECE");
+  const [unitLabel, setUnitLabel] = useState("");
+  const [expiryDate, setExpiryDate] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const existing = useQuery({
@@ -52,10 +57,14 @@ export default function NewSnackPage() {
           imageUrl: imageUrl || undefined,
           initialQuantity: Number(initialQuantity),
           lowStockThreshold: Number(lowStockThreshold),
+          unit,
+          unitLabel: unitLabel || undefined,
+          expiryDate: expiryDate || undefined,
         }),
       });
     },
     onSuccess: () => {
+      toast.success("Snack created!");
       qc.invalidateQueries({ queryKey: ["inventory"] });
       qc.invalidateQueries({ queryKey: ["products"] });
       router.push("/inventory");
@@ -172,6 +181,35 @@ export default function NewSnackPage() {
               className="w-full rounded-xl bg-surface-container-highest px-4 py-4 ring-1 ring-outline-variant/15 focus:ring-2 focus:ring-primary"
               value={lowStockThreshold}
               onChange={(e) => setLowStockThreshold(e.target.value)}
+            />
+          </Field>
+          <Field label="Unit">
+            <select
+              className="w-full rounded-xl bg-surface-container-highest px-4 py-4 ring-1 ring-outline-variant/15"
+              value={unit}
+              onChange={(e) => setUnit(e.target.value)}
+            >
+              {PRODUCT_UNITS.map((u) => (
+                <option key={u} value={u}>
+                  {u}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Unit label (optional)">
+            <input
+              className="w-full rounded-xl bg-surface-container-highest px-4 py-4 ring-1 ring-outline-variant/15"
+              value={unitLabel}
+              onChange={(e) => setUnitLabel(e.target.value)}
+              placeholder="e.g. lon, gói"
+            />
+          </Field>
+          <Field label="Expiry date (optional)">
+            <input
+              type="date"
+              className="w-full rounded-xl bg-surface-container-highest px-4 py-4 ring-1 ring-outline-variant/15"
+              value={expiryDate}
+              onChange={(e) => setExpiryDate(e.target.value)}
             />
           </Field>
         </div>

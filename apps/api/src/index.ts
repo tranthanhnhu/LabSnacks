@@ -14,18 +14,24 @@ import { UserService } from "./services/UserService.js";
 import { AnalyticsService } from "./services/AnalyticsService.js";
 import { DashboardService } from "./services/DashboardService.js";
 import { HistoryService } from "./services/HistoryService.js";
+import { ExpiryService } from "./services/ExpiryService.js";
+import { ImportService } from "./services/ImportService.js";
+import { TakeQuotaService } from "./services/TakeQuotaService.js";
 import { createV1Router } from "./routes/v1.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 
 const stockSubject = new StockSubject();
 stockSubject.register(new LowStockObserver(prisma));
 
-const inventoryService = new InventoryService(stockSubject);
+const takeQuotaService = new TakeQuotaService();
+const productService = new ProductService();
+const inventoryService = new InventoryService(stockSubject, takeQuotaService);
 const restockService = new RestockService(inventoryService);
+const expiryService = new ExpiryService();
 
 const deps = {
   auth: new AuthService(),
-  products: new ProductService(),
+  products: productService,
   inventory: inventoryService,
   restock: restockService,
   notifications: new NotificationService(),
@@ -33,13 +39,15 @@ const deps = {
   analytics: new AnalyticsService(),
   dashboard: new DashboardService(),
   history: new HistoryService(),
+  expiry: expiryService,
+  import: new ImportService(productService),
+  takeQuota: takeQuotaService,
 };
 
 const app = express();
 app.use(
   cors({
     origin: (origin, cb) => {
-      // Non-browser clients (curl/Postman) may not send Origin.
       if (!origin) return cb(null, true);
 
       const allowed = env.CORS_ORIGIN.split(",")
@@ -48,8 +56,6 @@ app.use(
 
       if (allowed.includes(origin)) return cb(null, true);
 
-      // In dev, Next.js may auto-pick a different port (3001/3002/...) when 3000 is busy.
-      // Allow localhost ports to reduce setup friction for newcomers.
       if (env.NODE_ENV === "development" && /^http:\/\/localhost:\d+$/.test(origin)) {
         return cb(null, true);
       }
@@ -68,6 +74,11 @@ app.get("/health", (_req, res) => {
 
 app.use("/api", createV1Router(deps));
 app.use(errorHandler);
+
+void expiryService.checkAndNotify().catch(console.error);
+setInterval(() => {
+  void expiryService.checkAndNotify().catch(console.error);
+}, 60 * 60 * 1000);
 
 app.listen(env.PORT, () => {
   console.log(`API listening on http://localhost:${env.PORT}`);

@@ -1,3 +1,4 @@
+import { InventoryLogType, ProductUnit } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 
 export class ProductService {
@@ -23,6 +24,9 @@ export class ProductService {
     imageUrl?: string | null;
     initialQuantity: number;
     lowStockThreshold: number;
+    unit?: ProductUnit;
+    unitLabel?: string | null;
+    expiryDate?: Date | null;
   }) {
     return prisma.$transaction(async (tx) => {
       const product = await tx.product.create({
@@ -32,6 +36,9 @@ export class ProductService {
           category: input.category,
           description: input.description ?? undefined,
           imageUrl: input.imageUrl ?? undefined,
+          unit: input.unit ?? ProductUnit.PIECE,
+          unitLabel: input.unitLabel ?? undefined,
+          expiryDate: input.expiryDate ?? undefined,
         },
       });
       await tx.inventory.create({
@@ -39,6 +46,14 @@ export class ProductService {
           productId: product.id,
           quantity: input.initialQuantity,
           lowStockThreshold: input.lowStockThreshold,
+        },
+      });
+      await tx.inventoryLog.create({
+        data: {
+          type: InventoryLogType.CREATE,
+          productId: product.id,
+          delta: input.initialQuantity,
+          note: "Product created",
         },
       });
       return tx.product.findUniqueOrThrow({
@@ -55,6 +70,9 @@ export class ProductService {
       category: string;
       description: string | null;
       imageUrl: string | null;
+      unit: ProductUnit;
+      unitLabel: string | null;
+      expiryDate: Date | null;
     }>,
   ) {
     return prisma.product.update({

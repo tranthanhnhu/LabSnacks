@@ -1,9 +1,14 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import Link from "next/link";
+import { useMemo, useState } from "react";
+import { EmptyState } from "@/components/empty-state";
+import { HistoryEntry } from "@/components/history-entry";
+import { LoadingSkeleton } from "@/components/loading-skeleton";
+import { PageHeader } from "@/components/page-header";
 import { useAuth } from "@/context/auth-context";
 import { apiFetch, ApiError } from "@/lib/api";
+import { downloadCsv } from "@/lib/export-csv";
 
 type HistoryRow = {
   id: string;
@@ -15,95 +20,211 @@ type HistoryRow = {
   user: { id: string; name: string } | null;
 };
 
-function formatDelta(delta: number) {
-  return delta > 0 ? `+${delta} items` : `${delta} item${Math.abs(delta) === 1 ? "" : "s"}`;
-}
+type HistoryResponse = {
+  items: HistoryRow[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+};
+
+type ProductOption = { id: string; name: string; sku: string };
+type UserOption = { id: string; name: string; email: string };
+
+const LOG_TYPES = ["", "TAKE", "RESTOCK", "ADJUST", "CREATE"] as const;
 
 export default function HistoryPage() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
+  const canFilterUser = user?.role.slug === "ADMIN" || user?.role.slug === "MANAGER";
+
+  const [page, setPage] = useState(1);
+  const [type, setType] = useState("");
+  const [productId, setProductId] = useState("");
+  const [userId, setUserId] = useState("");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+
+  const queryString = useMemo(() => {
+    const p = new URLSearchParams();
+    p.set("page", String(page));
+    p.set("limit", "20");
+    if (type) p.set("type", type);
+    if (productId) p.set("productId", productId);
+    if (userId && canFilterUser) p.set("userId", userId);
+    if (from) p.set("from", new Date(from).toISOString());
+    if (to) p.set("to", new Date(`${to}T23:59:59`).toISOString());
+    return p.toString();
+  }, [page, type, productId, userId, from, to, canFilterUser]);
+
   const q = useQuery({
-    queryKey: ["history"],
-    queryFn: () => apiFetch<HistoryRow[]>("/api/history", { token }),
+    queryKey: ["history", queryString],
+    queryFn: () => apiFetch<HistoryResponse>(`/api/history?${queryString}`, { token }),
     enabled: !!token,
     refetchInterval: 30_000,
   });
 
+  const products = useQuery({
+    queryKey: ["products"],
+    queryFn: () => apiFetch<ProductOption[]>("/api/products", { token }),
+    enabled: !!token,
+  });
+
+  const users = useQuery({
+    queryKey: ["users"],
+    queryFn: () => apiFetch<UserOption[]>("/api/users", { token }),
+    enabled: !!token && canFilterUser,
+  });
+
   return (
     <div className="space-y-8">
-      <header>
-        <h1 className="font-headline text-5xl font-extrabold tracking-tight text-primary md:text-6xl">
-          History
-        </h1>
-        <p className="mt-2 text-on-surface-variant">Recent inventory activity.</p>
-      </header>
+      <PageHeader title="History" subtitle="Filter and browse inventory activity.">
+        <button
+          type="button"
+          disabled={!q.data?.items.length}
+          onClick={() =>
+            q.data &&
+            downloadCsv(
+              "inventory-history.csv",
+              q.data.items.map((e) => ({
+                date: e.createdAt,
+                type: e.type,
+                product: e.product.name,
+                sku: e.product.sku,
+                user: e.user?.name ?? "",
+                delta: e.delta,
+                note: e.note ?? "",
+              })),
+            )
+          }
+          className="rounded-full bg-primary px-6 py-2 text-sm font-bold text-on-primary disabled:opacity-50"
+        >
+          Export CSV
+        </button>
+      </PageHeader>
 
-      <section className="rounded-[var(--radius-lg)] bg-surface-container-low p-8 relative overflow-hidden">
-        <div className="absolute top-0 right-0 p-8 opacity-10">
-          <span className="material-symbols-outlined text-9xl">history_edu</span>
-        </div>
-        <div className="relative z-10">
-          <h2 className="mb-6 flex items-center gap-3 font-headline text-3xl font-extrabold text-rose-800">
-            <span className="material-symbols-outlined">receipt_long</span> Recent History
-          </h2>
-
-          {q.isLoading && <p className="text-on-surface-variant">Loading…</p>}
-          {q.error && (
-            <p className="text-error">
-              {q.error instanceof ApiError ? q.error.message : "Could not load history."}
-            </p>
+      <section className="rounded-[var(--radius-lg)] bg-surface-container-low p-4 sticker-shadow">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <label className="text-xs font-bold uppercase text-outline">
+            Type
+            <select
+              className="mt-1 w-full rounded-xl bg-surface-container-highest px-3 py-2 text-sm"
+              value={type}
+              onChange={(e) => {
+                setType(e.target.value);
+                setPage(1);
+              }}
+            >
+              {LOG_TYPES.map((t) => (
+                <option key={t || "all"} value={t}>
+                  {t || "All types"}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-xs font-bold uppercase text-outline">
+            Product
+            <select
+              className="mt-1 w-full rounded-xl bg-surface-container-highest px-3 py-2 text-sm"
+              value={productId}
+              onChange={(e) => {
+                setProductId(e.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="">All products</option>
+              {products.data?.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          {canFilterUser && (
+            <label className="text-xs font-bold uppercase text-outline">
+              User
+              <select
+                className="mt-1 w-full rounded-xl bg-surface-container-highest px-3 py-2 text-sm"
+                value={userId}
+                onChange={(e) => {
+                  setUserId(e.target.value);
+                  setPage(1);
+                }}
+              >
+                <option value="">All users</option>
+                {users.data?.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                  </option>
+                ))}
+              </select>
+            </label>
           )}
-
-          <div className="space-y-4">
-            {q.data?.map((e) => {
-              const badge =
-                e.delta < 0
-                  ? "bg-pink-100 text-pink-700"
-                  : e.delta > 0
-                    ? "bg-secondary-container text-secondary"
-                    : "bg-surface-container-highest text-on-surface-variant";
-              const iconWrap =
-                e.delta < 0
-                  ? "bg-tertiary-container text-tertiary"
-                  : e.delta > 0
-                    ? "bg-outline-variant text-white"
-                    : "bg-secondary-container text-secondary";
-              const actor = e.user?.name ?? (e.delta > 0 ? "System" : "Unknown");
-              const verb = e.delta < 0 ? "just took" : e.delta > 0 ? "restocked" : "updated";
-              const qty = Math.abs(e.delta);
-
-              return (
-                <div
-                  key={e.id}
-                  className="flex items-center gap-4 rounded-2xl bg-white/60 p-4 shadow-sm transition-transform hover:translate-x-2"
-                >
-                  <div className={`flex h-10 w-10 items-center justify-center rounded-full ${iconWrap}`}>
-                    <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>
-                      person
-                    </span>
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-bold">
-                      {actor} <span className="font-normal text-outline">{verb}</span> {qty}x{" "}
-                      {e.product.name}
-                    </p>
-                    <p className="text-xs text-outline-variant">
-                      {new Date(e.createdAt).toLocaleString()}
-                    </p>
-                  </div>
-                  <div className={`rounded-full px-3 py-1 text-xs font-bold ${badge}`}>
-                    {formatDelta(e.delta)}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <Link href="/inventory" className="mt-8 inline-flex items-center gap-2 font-bold text-primary hover:underline">
-            Back to inventory <span className="material-symbols-outlined">arrow_forward</span>
-          </Link>
+          <label className="text-xs font-bold uppercase text-outline">
+            From
+            <input
+              type="date"
+              className="mt-1 w-full rounded-xl bg-surface-container-highest px-3 py-2 text-sm"
+              value={from}
+              onChange={(e) => {
+                setFrom(e.target.value);
+                setPage(1);
+              }}
+            />
+          </label>
+          <label className="text-xs font-bold uppercase text-outline">
+            To
+            <input
+              type="date"
+              className="mt-1 w-full rounded-xl bg-surface-container-highest px-3 py-2 text-sm"
+              value={to}
+              onChange={(e) => {
+                setTo(e.target.value);
+                setPage(1);
+              }}
+            />
+          </label>
         </div>
+      </section>
+
+      <section className="relative overflow-hidden rounded-[var(--radius-lg)] bg-surface-container-low p-8">
+        {q.isLoading && <LoadingSkeleton rows={5} />}
+        {q.error && (
+          <p className="text-error">
+            {q.error instanceof ApiError ? q.error.message : "Could not load history."}
+          </p>
+        )}
+        {q.data?.items.length === 0 && !q.isLoading && (
+          <EmptyState title="No activity found" message="Try adjusting your filters." />
+        )}
+        <div className="space-y-4">
+          {q.data?.items.map((e) => (
+            <HistoryEntry key={e.id} e={e} />
+          ))}
+        </div>
+        {q.data && q.data.totalPages > 1 && (
+          <div className="mt-8 flex items-center justify-center gap-4">
+            <button
+              type="button"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => p - 1)}
+              className="rounded-full bg-surface-container-highest px-4 py-2 text-sm font-bold disabled:opacity-40"
+            >
+              Previous
+            </button>
+            <span className="text-sm text-on-surface-variant">
+              Page {q.data.page} of {q.data.totalPages} ({q.data.total} total)
+            </span>
+            <button
+              type="button"
+              disabled={page >= q.data.totalPages}
+              onClick={() => setPage((p) => p + 1)}
+              className="rounded-full bg-surface-container-highest px-4 py-2 text-sm font-bold disabled:opacity-40"
+            >
+              Next
+            </button>
+          </div>
+        )}
       </section>
     </div>
   );
 }
-
